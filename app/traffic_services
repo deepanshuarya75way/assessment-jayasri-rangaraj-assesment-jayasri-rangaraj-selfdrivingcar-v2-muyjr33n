@@ -1,0 +1,42 @@
+# app/traffic_services.py
+import os
+import requests
+
+def get_route_and_map(origin_lat, origin_lon, dest_lat, dest_lon):
+
+    api_key = os.getenv("ORS_API_KEY")
+
+    url = "https://api.openrouteservice.org/v2/directions/driving-car"
+
+    headers = {
+        "Authorization": api_key,
+        "Content-Type": "application/json"
+    }
+
+    body = {
+        "coordinates": [
+            [origin_lon, origin_lat],
+            [dest_lon, dest_lat]
+        ]
+    }
+
+    try:
+        resp = requests.post(url, json=body, headers=headers, timeout=8)
+        data = resp.json()
+    except Exception as e:
+        return f"Error contacting routing service: {e}", None
+
+    try:
+        summary = data["routes"][0]["summary"]
+
+        distance_km = summary["distance"] / 1000
+        duration_min = summary["duration"] / 60
+
+        geometry = data["routes"][0]["geometry"]
+
+        text = f"Distance: {distance_km:.2f} km. Estimated time: {duration_min:.1f} minutes."
+
+        return text, geometry
+
+    except Exception:
+        return "Could not calculate route.", None
