@@ -1,5 +1,8 @@
+
+# pyright: basic, reportAttributeAccessIssue=false, reportMissingImports=false, reportMissingTypeStubs=false, reportMissingTypeArgument=false, reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnusedCallResult=false, reportDeprecated=false, reportCallIssue=false, reportArgumentType=false, reportOptionalMemberAccess=false
 from __future__ import annotations
 
+from gradio.themes.base import Base
 import os
 from dotenv import load_dotenv
 from typing import Tuple
@@ -12,11 +15,13 @@ import requests
 import speech_recognition as sr
 from gtts import gTTS
 from folium import PolyLine
+from gradio.themes import Base
 import folium
 from youtubesearchpython import VideosSearch
 from google import genai
 from google.genai import types
 from app.inference_service import SelfDrivingInferenceService, draw_detections_on_image
+
 # Load environment variables
 load_dotenv()
 
@@ -27,13 +32,16 @@ load_dotenv()
 DEFAULT_WEIGHTS = "yolov8n.pt"
 
 # Load API keys from .env
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 ORS_API_KEY = os.getenv("ORS_API_KEY")
 
 # Initialize API clients
 ors_client = openrouteservice.Client(key=ORS_API_KEY) if ORS_API_KEY else None
+
+
 def geocode_destination(name: str) -> tuple[float, float] | None:
-    """Use OpenRouteService geocoding to convert a place name → (lon, lat)."""
+    """Use OpenRouteService geocoding to convert a place name â†’ (lon, lat)."""
     if not ors_client or not name.strip():
         return None
     try:
@@ -46,6 +54,8 @@ def geocode_destination(name: str) -> tuple[float, float] | None:
         return lon, lat
     except Exception:
         return None
+
+
 # ---------------------------------------------------------------------
 # Shared model service
 # ---------------------------------------------------------------------
@@ -90,7 +100,7 @@ def transcribe_audio(audio_file) -> str:
     try:
         with sr.AudioFile(audio_file) as source:
             audio = recognizer.record(source)
-            text = recognizer.recognize_google(audio)
+            text = recognizer.recognize_google(audio) # was broken: recognizer.7(audio)
             return text.lower()
     except Exception as e:
         return f"Transcription error: {e}"
@@ -150,7 +160,7 @@ def navigation_pipeline(
             profile="driving-car",
             format="geojson",
         )
-        
+
         feat = route["features"][0]
         props = feat["properties"]
         summary = props.get("summary", {})
@@ -159,8 +169,8 @@ def navigation_pipeline(
         coords = feat["geometry"]["coordinates"]
     except Exception as e:
         # FALLBACK MOCK DATA
-        distance_m = 1450000.0  # 1450 km (e.g., Delhi to Mumbai)
-        duration_s = 72000.0    # 20 hours
+        distance_m = 1450000.0 # 1450 km (e.g., Delhi to Mumbai)
+        duration_s = 72000.0 # 20 hours
         # Dummy linear path
         coords = [
             [origin_lon, origin_lat],
@@ -218,6 +228,7 @@ def navigation_pipeline(
 
     return text_summary, map_html, audio_path or ""
 
+
 # ---------------------------------------------------------------------
 # PERCEPTION TAB (YOLO)
 # ---------------------------------------------------------------------
@@ -237,7 +248,7 @@ def perception_pipeline(
     if tta:
         img_flip = cv2.flip(img_bgr, 1)
         det1 = service.predict(img_bgr)
-        det2 = service.predict(img_flip)
+        det2 = service.predict(img_flip) # noqa: F841 (computed but not used)
         det = det1
     else:
         det = service.predict(img_bgr)
@@ -296,7 +307,7 @@ def assistant_chat(history: list[dict] | None, message: str) -> list[dict]:
     if "play" in lower and "music" in lower:
         q = lower.replace("play", "").replace("music", "").strip() or "music"
         url = f"https://www.youtube.com/results?search_query={q.replace(' ', '+')}"
-        bot = f"Here’s music for **{q}**: {url}"
+        bot = f"Hereâ€™s music for **{q}**: {url}"
         history.append({"role": "user", "content": user_msg})
         history.append({"role": "assistant", "content": bot})
         return history
@@ -312,12 +323,12 @@ def assistant_chat(history: list[dict] | None, message: str) -> list[dict]:
 
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-        
+
         contents = []
         for msg in history:
             msg_role = "user" if msg["role"] == "user" else "model"
             msg_content = msg.get("content", "")
-            
+
             # In Gradio 5, content might be a list of multimodal dict elements
             if isinstance(msg_content, list):
                 text_parts = [item["text"] for item in msg_content if isinstance(item, dict) and "text" in item]
@@ -326,7 +337,7 @@ def assistant_chat(history: list[dict] | None, message: str) -> list[dict]:
                 msg_content = str(msg_content)
 
             contents.append(types.Content(role=msg_role, parts=[types.Part.from_text(text=msg_content)]))
-            
+
         contents.append(types.Content(role="user", parts=[types.Part.from_text(text=user_msg)]))
 
         system_instruction = (
@@ -366,9 +377,10 @@ def get_weather(location: str) -> str:
         current = data['current_condition'][0]
         temp = current['temp_C']
         weather = current['weatherDesc'][0]['value']
-        return f"Temperature: {temp}°C, Weather: {weather}"
+        return f"Temperature: {temp}Â°C, Weather: {weather}"
     except Exception:
         return "Weather data not available. Check location name."
+
 
 def recommend_entertainment(weather: str, query: str, language: str) -> str:
     """Use OpenAI to recommend entertainment based on weather and query."""
@@ -383,9 +395,10 @@ def recommend_entertainment(weather: str, query: str, language: str) -> str:
             messages=[{"role": "user", "content": prompt}],
             max_tokens=50
         )
-        return resp.choices[0].message.content.strip()
+        return (resp.choices[0].message.content or "").strip()
     except Exception:
         return f"Recommended: {query}"
+
 
 def search_youtube(query: str) -> str:
     """Search YouTube and return embed HTML."""
@@ -399,6 +412,7 @@ def search_youtube(query: str) -> str:
         pass
     return "No video found. Try a different query."
 
+
 def entertainment_pipeline(location: str, language: str, query: str) -> tuple[str, str, str]:
     """Pipeline for entertainment."""
     weather = get_weather(location)
@@ -406,6 +420,11 @@ def entertainment_pipeline(location: str, language: str, query: str) -> tuple[st
     video_html = search_youtube(recommendation)
     return weather, f"Recommendation: {recommendation}", video_html
 
+
+
+# ---------------------------------------------------------------------
+# STYLING
+# ---------------------------------------------------------------------
 
 CUSTOM_CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
@@ -454,7 +473,7 @@ h1, h2, h3, h4 {
     height: 200%;
     transform-style: preserve-3d;
     background-color: #1a1a1a !important; /* Asphalt color */
-    background-image: 
+    background-image:
         /* Road lane dashes */
         linear-gradient(90deg, transparent 49%, rgba(255, 255, 255, 0.4) 49%, rgba(255, 255, 255, 0.4) 51%, transparent 51%),
         /* Asphalt noise texture */
@@ -494,9 +513,9 @@ h1, h2, h3, h4 {
     z-index: 10 !important;
     background: linear-gradient(145deg, #2a2a2a, #1a1a1a) !important;
     border: 1px solid #333 !important;
-    border-top: 1px solid #4a4a4a !important; 
+    border-top: 1px solid #4a4a4a !important;
     border-radius: 12px !important;
-    box-shadow: 
+    box-shadow:
         0 15px 35px rgba(0,0,0,0.8),
         inset 0 1px 0 rgba(255,255,255,0.05) !important;
     margin-bottom: 20px;
@@ -548,7 +567,7 @@ textarea, input[type="text"] {
     border: 2px solid #111 !important;
     border-bottom: 1px solid #333 !important;
     border-radius: 6px !important;
-    color: #4ade80 !important; 
+    color: #4ade80 !important;
     font-family: 'Courier New', Courier, monospace !important;
     box-shadow: inset 0 4px 8px rgba(0,0,0,0.8) !important;
 }
@@ -567,78 +586,87 @@ textarea:focus, input[type="text"]:focus {
 }
 """
 
-def generate_html_background():
-    nodes_html = '<div class="icon-3d" style="left: 45%; bottom: 20%;"></div><div class="icon-3d" style="left: 65%; bottom: 60%; transform: rotateX(-75deg) translateZ(10px) scale(0.6);"></div>'
-    return f'<div class="background-3d"><div class="map-grid-plane"></div>{nodes_html}</div>'
-def build_interface() -> gr.Blocks:
-    with gr.Blocks(title="AI Maps Assistant", css=CUSTOM_CSS, theme=gr.themes.Base(primary_hue="blue", neutral_hue="slate")) as demo:
 
-        
+def generate_html_background() -> str:
+    """Animated 3D asphalt road with a few swaying cars behind the UI."""
+    nodes_html = (
+        '<div class="icon-3d" style="left: 45%; bottom: 20%; animation-delay: 0s;"></div>'
+        '<div class="icon-3d" style="left: 30%; bottom: 40%; animation-delay: 0.7s;"></div>'
+        '<div class="icon-3d" style="left: 60%; bottom: 55%; animation-delay: 1.3s;"></div>'
+    )
+    return (
+        '<div class="background-3d">'
+        f'<div class="map-grid-plane">{nodes_html}</div>'
+        '</div>'
+    )
+
+
+# ---------------------------------------------------------------------
+# INTERFACE
+# ------------------------------------------------------
+THEME = Base(primary_hue="blue", neutral_hue="slate")
+GRADIO_MAJOR = int(gr.__version__.split(".")[0])
+
+
+def _nav(origin: str, dest: str):
+    """Wrapper so an empty audio path becomes None (Gradio-safe)."""
+    text, map_html, audio = navigation_pipeline(origin, dest)
+    return text, map_html or "", (audio or None)
+
+
+def _chat(history, message):
+    """Wrapper that also clears the input box after sending."""
+    return assistant_chat(history, message), ""
+
+
+def build_interface() -> gr.Blocks:
+    blocks_kwargs = {"title": "AI Maps Assistant"}
+    if GRADIO_MAJOR < 6: # Gradio 6 moved css/theme to launch()
+        blocks_kwargs["css"] = CUSTOM_CSS
+        blocks_kwargs["theme"] = THEME
+
+    with gr.Blocks(**blocks_kwargs) as demo:
         gr.HTML(generate_html_background())
-        
         gr.Markdown(
-            "## AI Maps & Navigation Assistant\n"
-            "Intelligent route planning, real-time street perception, and conversational map guidance."
+            "# AI Maps & Navigation Assistant\n"
+            "Self-driving perception, route planning and conversational map guidance."
         )
 
         with gr.Tabs():
-            # NAVIGATION TAB
+            # ---------------- NAVIGATION ----------------
             with gr.Tab("Navigation"):
                 with gr.Row():
                     with gr.Column():
-                        origin = gr.Textbox(
-                            label="Current location (text)",
-                            placeholder="e.g. IIT Delhi main gate",
-                        )
-                        destination = gr.Textbox(
-                            label="Destination (text)",
-                            placeholder="e.g. Delhi Airport T3",
-                        )
-                        voice_audio = gr.Audio(label="Voice destination input", sources=["microphone"], type="filepath")
-                        transcribe_btn = gr.Button("Transcribe voice to destination")
+                        nav_origin = gr.Textbox(label="Current location (text)",
+                                                placeholder="e.g. IIT Delhi main gate")
+                        nav_dest = gr.Textbox(label="Destination (text)",
+                                              placeholder="e.g. Delhi airport")
+                        nav_mic = gr.Audio(sources=["microphone"], type="filepath",
+                                           label="Or speak your destination")
+                        nav_transcribe_btn = gr.Button("Transcribe voice to destination")
                         nav_btn = gr.Button("Plan route", variant="primary")
-
                     with gr.Column():
-                        nav_summary = gr.Markdown(label="Route summary")
-                        nav_map = gr.HTML(label="Route map")
-                        nav_audio = gr.Audio(label="Voice navigation", autoplay=True)
+                        nav_text = gr.Markdown()
+                        nav_map = gr.HTML()
+                        nav_audio = gr.Audio(label="Voice guidance", type="filepath", autoplay=True)
 
-                transcribe_btn.click(
-                    fn=transcribe_audio,
-                    inputs=[voice_audio],
-                    outputs=[destination],
-                )
+                nav_transcribe_btn.click(transcribe_audio, inputs=nav_mic, outputs=nav_dest)
+                nav_btn.click(_nav, inputs=[nav_origin, nav_dest],
+                              outputs=[nav_text, nav_map, nav_audio])
 
-                nav_btn.click(
-                    fn=navigation_pipeline,
-                    inputs=[origin, destination],
-                    outputs=[nav_summary, nav_map, nav_audio],
-                )
-
-            # PERCEPTION TAB
+            # ---------------- PERCEPTION ----------------
             with gr.Tab("Perception"):
                 with gr.Row():
                     with gr.Column():
-                        perc_image = gr.Image(
-                            label="Upload / capture road image",
-                            type="numpy",
-                            sources=["upload", "webcam"],
-                        )
-                        show_heat = gr.Checkbox(value=True, label="Overlay risk heatmap")
-                        use_tta = gr.Checkbox(value=False, label="Robust mode (TTA)")
-                        perc_btn = gr.Button("Analyze scene", variant="primary")
-
+                        perc_image = gr.Image(label="Road / driving scene", type="numpy")
+                        show_heat = gr.Checkbox(label="Show risk heatmap", value=True)
+                        use_tta = gr.Checkbox(label="Flip test (TTA)", value=False)
+                        perc_btn = gr.Button("Analyse scene", variant="primary")
                     with gr.Column():
-                        perc_output = gr.Image(
-                            label="Perception & risk visualization",
-                            type="numpy",
-                        )
-                        perc_risk = gr.Number(
-                            label="Global risk score (0 = safe, 1 = high risk)",
-                            precision=3,
-                        )
-                        perc_text = gr.Markdown(label="Scene & risk explanation")
-                        perc_audio = gr.Audio(label="Voice guidance", autoplay=True)
+                        perc_output = gr.Image(label="Detections and risk overlay")
+                        perc_text = gr.Textbox(label="Scene summary", lines=3)
+                        perc_risk = gr.Slider(0, 1, value=0, label="Risk score", interactive=False)
+                        perc_audio = gr.Audio(label="Voice guidance", type="filepath", autoplay=True)
 
                 perc_btn.click(
                     fn=perception_pipeline,
@@ -646,53 +674,43 @@ def build_interface() -> gr.Blocks:
                     outputs=[perc_output, perc_text, perc_risk, perc_audio],
                 )
 
-            # ASSISTANT TAB
+            # ---------------- ASSISTANT ----------------
             with gr.Tab("Assistant"):
-                chatbot = gr.Chatbot(label="In-car assistant")
-                msg = gr.Textbox(label="Ask me anything", placeholder="How do I use navigation?")
-                send = gr.Button("Send", variant="primary")
+                try:
+                    chatbot = gr.Chatbot(label="In-car assistant", type="messages", height=400)
+                except TypeError: # newer Gradio: messages format is the default
+                    chatbot = gr.Chatbot(label="In-car assistant", height=400)
+                chat_in = gr.Textbox(label="Your message",
+                                     placeholder="Ask how to use the app, or say 'play music'")
+                chat_btn = gr.Button("Send", variant="primary")
 
-                def chat_wrapper(history, message):
-                    return assistant_chat(history, message), ""
+                chat_btn.click(_chat, inputs=[chatbot, chat_in], outputs=[chatbot, chat_in])
+                chat_in.submit(_chat, inputs=[chatbot, chat_in], outputs=[chatbot, chat_in])
 
-                send.click(
-                    fn=chat_wrapper,
-                    inputs=[chatbot, msg],
-                    outputs=[chatbot, msg],
-                )
+            # ---------------- ENTERTAINMENT ----------------
+            with gr.Tab("Entertainment"):
+                ent_location = gr.Textbox(label="Location (for weather)", placeholder="e.g. Delhi")
+                ent_language = gr.Textbox(label="Language", value="English")
+                ent_query = gr.Textbox(label="What do you feel like?", placeholder="e.g. relaxing music")
+                ent_btn = gr.Button("Recommend", variant="primary")
+                ent_weather = gr.Textbox(label="Weather")
+                ent_reco = gr.Textbox(label="Recommendation")
+                ent_video = gr.HTML()
 
-            # # ENTERTAINMENT TAB
-            # with gr.Tab("Entertainment"):
-            #     with gr.Row():
-            #         with gr.Column():
-            #             ent_location = gr.Textbox(
-            #                 label="Your location",
-            #                 placeholder="e.g. Delhi",
-            #             )
-            #             ent_language = gr.Dropdown(
-            #                 choices=["en", "hi", "es", "fr", "de"],
-            #                 value="en",
-            #                 label="Preferred language",
-            #             )
-            #             ent_query = gr.Textbox(
-            #                 label="What to play/watch",
-            #                 placeholder="e.g. relaxing music, funny videos",
-            #             )
-            #             ent_btn = gr.Button("Get Entertainment", variant="primary")
+                ent_btn.click(entertainment_pipeline,
+                              inputs=[ent_location, ent_language, ent_query],
+                              outputs=[ent_weather, ent_reco, ent_video])
 
-            #         with gr.Column():
-            #             ent_weather = gr.Markdown(label="Current Weather")
-            #             ent_recommendation = gr.Markdown(label="AI Recommendation")
-            #             ent_video = gr.HTML(label="YouTube Video")
+    return demo
 
-            #     ent_btn.click(
-            #         fn=entertainment_pipeline,
-            #         inputs=[ent_location, ent_language, ent_query],
-            #         outputs=[ent_weather, ent_recommendation, ent_video],
-            #     )
 
-        return demo
+def main():
+    demo = build_interface()
+    if GRADIO_MAJOR >= 6:
+        demo.launch(css=CUSTOM_CSS, theme=THEME)
+    else:
+        demo.launch()
+
 
 if __name__ == "__main__":
-    app = build_interface()
-    app.launch()
+    main()

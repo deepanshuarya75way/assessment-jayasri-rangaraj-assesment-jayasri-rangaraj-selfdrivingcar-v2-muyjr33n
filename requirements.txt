@@ -5,3 +5,14 @@ opencv-python-headless
 pandas
 python-dotenv
 gradio
+ultralytics
+requests
+python-dotenv
+PyYAML
+folium
+openrouteservice
+gTTS
+SpeechRecognition
+google-genai
+youtube-search-python
+httpx==0.27.2
